@@ -1039,6 +1039,14 @@ func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
 			},
 			expectedImports: []string{`x "time"`},
 		},
+		"embedded metadata imported under the runtime alias": {
+			fields: []parsing.Field{
+				{Type: parsing.MetadataType{Name: "TypeMeta", Package: "runtime", ImportPath: metav1Path}, IsInline: true},
+				{Type: parsing.MetadataType{Name: "ObjectMeta", Package: "runtime", ImportPath: metav1Path}, IsInline: true},
+				{Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}},
+			},
+			expectedImports: []string{metav1Import, runtimeImport},
+		},
 		"embedded metadata alongside slice of metav1.Condition": {
 			fields:          []parsing.Field{typeMeta, objectMeta, {Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
 			expectedImports: []string{metav1Import, runtimeImport},
