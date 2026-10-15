@@ -77,9 +77,12 @@ func GenerateDeepCopy(structs []parsing.Struct, headerFile string) ([]byte, erro
 
 		var fields []fieldCode
 		for _, field := range s.Fields {
-			collectImports(field.Type, packageName, allImports)
+			// Fields without copy code are covered by *out = *in. Collecting their
+			// imports could pull in a second package under an alias that is
+			// already taken.
 			if code := generateFieldCode(field, packageName); code != "" {
 				fields = append(fields, fieldCode{Code: code})
+				collectImports(field.Type, packageName, allImports)
 			}
 		}
 

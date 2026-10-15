@@ -1024,6 +1024,21 @@ func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
 			},
 			expectedImports: []string{metav1Import, `meta "` + metav1Path + `"`},
 		},
+		"standard library runtime struct alongside generated runtime import": {
+			fields: []parsing.Field{
+				typeMeta,
+				objectMeta,
+				{Name: "Stats", Type: parsing.StructType{Name: "MemStats", Package: "runtime", ImportPath: "runtime"}},
+			},
+			expectedImports: []string{runtimeImport},
+		},
+		"same alias for different packages in different files": {
+			fields: []parsing.Field{
+				{Name: "Endpoint", Type: parsing.StructType{Name: "URL", Package: "x", ImportPath: "net/url"}},
+				{Name: "Deadline", Type: parsing.TimeType{Package: "x", ImportPath: "time", IsPointer: true}},
+			},
+			expectedImports: []string{`x "time"`},
+		},
 		"embedded metadata alongside slice of metav1.Condition": {
 			fields:          []parsing.Field{typeMeta, objectMeta, {Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
 			expectedImports: []string{metav1Import, runtimeImport},

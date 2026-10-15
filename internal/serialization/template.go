@@ -87,8 +87,8 @@ func executeTemplate(tmplName, tmplContent string, data interface{}) ([]byte, er
 	return pruned, nil
 }
 
-// Imports are collected from every field type, but many fields are copied
-// without naming their type, so imports the code never references are dropped.
+// Imports are collected from every field with copy code, but some of that code
+// never names the field's type, so imports it never references are dropped.
 // Usage is checked per alias, since the same package can be imported under
 // more than one alias.
 func removeUnusedImports(src []byte) ([]byte, error) {
