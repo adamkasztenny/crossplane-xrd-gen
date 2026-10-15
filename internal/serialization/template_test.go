@@ -61,11 +61,11 @@ func requireImports(t *testing.T, expected []string, code string) {
 	file, err := parser.ParseFile(token.NewFileSet(), "", code, 0)
 	require.NoError(t, err, "Generated code has syntax errors")
 
-	qualifiers := make(map[string]bool)
+	usedQualifiers := make(map[string]bool)
 	ast.Inspect(file, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if ident, ok := sel.X.(*ast.Ident); ok {
-				qualifiers[ident.Name] = true
+				usedQualifiers[ident.Name] = true
 			}
 		}
 		return true
@@ -79,7 +79,7 @@ func requireImports(t *testing.T, expected []string, code string) {
 		if imp.Name != nil {
 			name = imp.Name.Name
 		}
-		require.Truef(t, qualifiers[name], "%q is imported as %s and not used", path, name)
+		require.Truef(t, usedQualifiers[name], "%q is imported as %s and not used", path, name)
 		actual = append(actual, name+" "+imp.Path.Value)
 	}
 	require.ElementsMatch(t, expected, actual)

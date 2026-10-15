@@ -19,7 +19,6 @@ package serialization
 import (
 	"bytes"
 	"fmt"
-	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
@@ -28,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/go/ast/astutil"
 
 	"github.com/crossplane-contrib/xrd-gen/internal/parsing"
 )
@@ -86,8 +87,7 @@ func executeTemplate(tmplName, tmplContent string, data interface{}) ([]byte, er
 }
 
 // Imports are collected from every field type, but many fields are copied
-// without naming their type, so imports the code never references are dropped
-// line by line. The generated code has one import per line.
+// without naming their type, so imports the code never references are dropped.
 func removeUnusedImports(src []byte) ([]byte, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
@@ -95,68 +95,35 @@ func removeUnusedImports(src []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	referenced := make(map[string]bool)
-	ast.Inspect(file, func(n ast.Node) bool {
-		if sel, ok := n.(*ast.SelectorExpr); ok {
-			if ident, ok := sel.X.(*ast.Ident); ok {
-				referenced[ident.Name] = true
-			}
+	type namedImport struct{ name, path string }
+	var unused []namedImport
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			return nil, err
 		}
-		return true
-	})
-
-	unusedLines := make(map[int]bool)
-	markLines := func(node ast.Node) {
-		for line := fset.Position(node.Pos()).Line; line <= fset.Position(node.End()).Line; line++ {
-			unusedLines[line] = true
-		}
-	}
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.IMPORT {
+		if astutil.UsesImport(file, path) {
 			continue
 		}
-		var unused []ast.Spec
-		for _, spec := range genDecl.Specs {
-			imp, ok := spec.(*ast.ImportSpec)
-			if !ok {
-				continue
-			}
-			name := importName(imp)
-			if name != "_" && name != "." && !referenced[name] {
-				unused = append(unused, spec)
-			}
+		var name string
+		if imp.Name != nil {
+			name = imp.Name.Name
 		}
-		if len(unused) == len(genDecl.Specs) {
-			markLines(genDecl)
-			continue
-		}
-		for _, spec := range unused {
-			markLines(spec)
-		}
+		unused = append(unused, namedImport{name: name, path: path})
 	}
-	if len(unusedLines) == 0 {
+	if len(unused) == 0 {
 		return src, nil
 	}
 
-	var out bytes.Buffer
-	for i, line := range bytes.SplitAfter(src, []byte("\n")) {
-		if !unusedLines[i+1] {
-			out.Write(line)
-		}
+	for _, imp := range unused {
+		astutil.DeleteNamedImport(fset, file, imp.name, imp.path)
 	}
-	return format.Source(out.Bytes())
-}
 
-func importName(imp *ast.ImportSpec) string {
-	if imp.Name != nil {
-		return imp.Name.Name
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, file); err != nil {
+		return nil, err
 	}
-	path, err := strconv.Unquote(imp.Path.Value)
-	if err != nil {
-		return imp.Path.Value
-	}
-	return path[strings.LastIndex(path, "/")+1:]
+	return buf.Bytes(), nil
 }
 
 func formatHeaderAsComment(header string) string {
