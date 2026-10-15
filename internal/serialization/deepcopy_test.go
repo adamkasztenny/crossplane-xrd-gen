@@ -955,10 +955,12 @@ func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
 			expectedImports: []string{runtimeImport},
 		},
 		"named ObjectMeta field": {
-			fields: []parsing.Field{{Name: "Metadata", Type: objectMeta.Type}},
+			fields:          []parsing.Field{{Name: "Metadata", Type: objectMeta.Type}},
+			expectedImports: []string{},
 		},
 		"metav1.Time": {
-			fields: []parsing.Field{{Name: "LastUpdated", Type: metav1Time}},
+			fields:          []parsing.Field{{Name: "LastUpdated", Type: metav1Time}},
+			expectedImports: []string{},
 		},
 		"pointer to metav1.Time": {
 			fields:          []parsing.Field{{Name: "LastUpdated", Type: parsing.TimeType{Package: "metav1", ImportPath: metav1Path, IsPointer: true}}},
@@ -969,16 +971,20 @@ func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
 			expectedImports: []string{`time "time"`},
 		},
 		"external struct": {
-			fields: []parsing.Field{{Name: "External", Type: externalStruct}},
+			fields:          []parsing.Field{{Name: "External", Type: externalStruct}},
+			expectedImports: []string{},
 		},
 		"pointer to external struct": {
 			fields: []parsing.Field{{Name: "External", Type: parsing.StructType{Name: "ExternalType", Package: "otherpkg", ImportPath: "github.com/example/otherpkg", IsPointer: true}}},
+			// Shallow-copied by *out = *in, so otherpkg is never referenced.
+			expectedImports: []string{},
 		},
 		"local struct and pointer to local struct": {
 			fields: []parsing.Field{
 				{Name: "Spec", Type: localStruct},
 				{Name: "OptionalSpec", Type: parsing.StructType{Name: "XWidgetSpec", Package: "testpkg", IsPointer: true}},
 			},
+			expectedImports: []string{},
 		},
 		"slice of metav1.Condition": {
 			fields:          []parsing.Field{{Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
