@@ -16,6 +16,8 @@ limitations under the License.
 
 package multialiasproject
 
+// This file imports k8s.io/apimachinery/pkg/apis/meta/v1 as metav1, while
+// widget.go imports the same package as meta.
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 type WidgetStatus struct {

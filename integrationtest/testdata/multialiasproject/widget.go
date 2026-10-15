@@ -16,6 +16,8 @@ limitations under the License.
 
 package multialiasproject
 
+// This file imports k8s.io/apimachinery/pkg/apis/meta/v1 as meta, while
+// status.go imports the same package as metav1.
 import meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +xrd-gen:object:root=true
