@@ -145,6 +145,25 @@ import (
 )
 `,
 		},
+		"names unaliased imports after the last path element": {
+			input: `package example
+
+import (
+	"github.com/example/unused"
+	"k8s.io/apimachinery/pkg/util/sets"
+)
+
+var _ sets.Empty
+`,
+			expected: `package example
+
+import (
+	"k8s.io/apimachinery/pkg/util/sets"
+)
+
+var _ sets.Empty
+`,
+		},
 		"leaves code without unused imports unchanged": {
 			input: `package example
 
@@ -168,4 +187,9 @@ func TestExample(t *testing.T) {}
 			require.Equal(t, tc.expected, string(actual))
 		})
 	}
+}
+
+func TestRemoveUnusedImports_InvalidSource(t *testing.T) {
+	_, err := removeUnusedImports([]byte("package example\n\nfunc {"))
+	require.Error(t, err)
 }
