@@ -251,6 +251,12 @@ func (p *Parser) parseFile(filePath string) ([]Struct, error) {
 
 	var structs []Struct
 
+	// A marker block must start after the end of the previous top-level
+	// declaration. Every declaration moves this boundary (imports, vars, consts,
+	// funcs and types), so comments inside or before one are never taken as
+	// markers for the next type. The first boundary is the position right after
+	// the package name, e.g. after `package api`, so the license header and the
+	// package doc comment are excluded.
 	previousEnd := file.Name.End()
 	for _, decl := range file.Decls {
 		declStart := previousEnd
@@ -261,6 +267,8 @@ func (p *Parser) parseFile(filePath string) ([]Struct, error) {
 			continue
 		}
 
+		// Lparen is only set for grouped declarations like `type ( A struct{}; B struct{} )`.
+		// controller-gen treats a comment block above a group as package-level.
 		var markerBlock *ast.CommentGroup
 		if genDecl.Lparen == token.NoPos {
 			markerBlock = p.markerBlockAbove(file.Comments, declStart, genDecl, genDecl.Doc)
@@ -310,10 +318,11 @@ func (p *Parser) extractImports(file *ast.File) map[string]string {
 	return imports
 }
 
-// Markers may also sit in the closest comment group above a node's doc comment,
-// separated from it by blank lines, matching controller-gen. Only comments after
-// the end of the previous node count, and a comment on the same line as that end
-// belongs to the previous node.
+// Markers are the `+xrd-gen:` comments this tool reads, e.g.
+// `// +xrd-gen:object:root=true`. Besides the doc comment, they may sit in the
+// closest comment group above it, separated by blank lines, matching
+// controller-gen. Only comments after the end of the previous node count, and a
+// comment on the same line as that end belongs to the previous node.
 func (p *Parser) markerBlockAbove(comments []*ast.CommentGroup, previousEnd token.Pos, node ast.Node, doc *ast.CommentGroup) *ast.CommentGroup {
 	limit := node.Pos()
 	if doc != nil {

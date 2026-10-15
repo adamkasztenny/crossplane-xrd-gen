@@ -2366,6 +2366,145 @@ type XWidgetSpec struct {
 	require.Empty(t, shape.EnumValues)
 }
 
+func TestParser_MarkersBeforePackageClauseNotPickedUp(t *testing.T) {
+	testCode := `// Copyright header.
+
+// +xrd-gen:object:root=true
+
+package test
+
+// XWidget is a composite resource.
+type XWidget struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+`
+
+	structs := parseSource(t, testCode)
+	require.Len(t, structs, 1)
+	require.False(t, structs[0].IsRoot)
+}
+
+func TestParser_DocCommentMarkersTakePrecedenceOverBlockAbove(t *testing.T) {
+	testCode := `package test
+
+// +xrd-gen:object:root=true
+// +xrd-gen:groupName=block.example.com
+
+// XWidget is a composite resource.
+// +xrd-gen:groupName=doc.example.com
+type XWidget struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+`
+
+	structs := parseSource(t, testCode)
+	require.Len(t, structs, 1)
+	require.True(t, structs[0].IsRoot)
+	require.Equal(t, "doc.example.com", structs[0].Group)
+}
+
+func TestParser_TypeMarkerBlockNotPickedUpByFirstField(t *testing.T) {
+	testCode := `package test
+
+// +xrd-gen:validation:Optional
+
+type XWidgetSpec struct {
+	// Size of the widget.
+	Size string ` + "`json:\"size\"`" + `
+}
+`
+
+	structs := parseSource(t, testCode)
+	require.Len(t, structs, 1)
+	require.Len(t, structs[0].Fields, 1)
+	require.False(t, structs[0].Fields[0].IsOptional)
+}
+
+func TestParser_MarkersOfImportOrFunctionNotPickedUp(t *testing.T) {
+	testCode := `package test
+
+import "strings" // +xrd-gen:object:root=true
+
+type AfterImport struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+
+func helper() string {
+	// +xrd-gen:object:root=true
+
+	return strings.ToUpper("widget")
+}
+
+type AfterFunc struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+`
+
+	structs := parseSource(t, testCode)
+	require.Len(t, structs, 2)
+	for _, s := range structs {
+		require.False(t, s.IsRoot, s.Name)
+	}
+}
+
+func TestParser_InvalidMarkersInBlockAboveDocComment(t *testing.T) {
+	tests := map[string]struct {
+		testCode      string
+		expectedError string
+	}{
+		"struct": {
+			testCode: `package test
+
+// +xrd-gen:validation:XValidation:rule="true",unknown="value"
+
+// XWidget is a composite resource.
+type XWidget struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+`,
+			expectedError: `unknown XValidation key "unknown"`,
+		},
+		"named field": {
+			testCode: `package test
+
+type XWidgetSpec struct {
+	// +xrd-gen:validation:XValidation:rule="true",unknown="value"
+
+	// Size of the widget.
+	Size string ` + "`json:\"size\"`" + `
+}
+`,
+			expectedError: `field Size: unknown XValidation key "unknown"`,
+		},
+		"embedded field": {
+			testCode: `package test
+
+type Base struct {
+	Size string ` + "`json:\"size\"`" + `
+}
+
+type XWidgetSpec struct {
+	// +xrd-gen:validation:XValidation:rule="true",unknown="value"
+
+	// Base holds the common fields.
+	Base
+}
+`,
+			expectedError: `unknown XValidation key "unknown"`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			testFile := filepath.Join(t.TempDir(), "test.go")
+			require.NoError(t, os.WriteFile(testFile, []byte(tc.testCode), 0o644))
+
+			_, err := NewParser().parseFile(testFile)
+			require.ErrorContains(t, err, tc.expectedError)
+		})
+	}
+}
+
 func parseSource(t *testing.T, source string) []Struct {
 	t.Helper()
 
