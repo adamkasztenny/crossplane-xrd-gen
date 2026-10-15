@@ -84,3 +84,88 @@ func requireImports(t *testing.T, expected []string, code string) {
 	}
 	require.ElementsMatch(t, expected, actual)
 }
+
+func TestRemoveUnusedImports(t *testing.T) {
+	tests := map[string]struct {
+		input    string
+		expected string
+	}{
+		"keeps used imports and drops unused ones": {
+			input: `package example
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	otherpkg "github.com/example/otherpkg"
+	runtime "k8s.io/apimachinery/pkg/runtime"
+	"time"
+)
+
+var _ runtime.Object
+var _ time.Time
+`,
+			expected: `package example
+
+import (
+	runtime "k8s.io/apimachinery/pkg/runtime"
+	"time"
+)
+
+var _ runtime.Object
+var _ time.Time
+`,
+		},
+		"drops the import block when no import is used": {
+			input: `package example
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type Example struct{}
+`,
+			expected: `package example
+
+type Example struct{}
+`,
+		},
+		"keeps blank and dot imports": {
+			input: `package example
+
+import (
+	_ "embed"
+	. "github.com/example/dotpkg"
+	unused "github.com/example/unused"
+)
+`,
+			expected: `package example
+
+import (
+	_ "embed"
+	. "github.com/example/dotpkg"
+)
+`,
+		},
+		"leaves code without unused imports unchanged": {
+			input: `package example
+
+import "testing"
+
+func TestExample(t *testing.T) {}
+`,
+			expected: `package example
+
+import "testing"
+
+func TestExample(t *testing.T) {}
+`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual, err := removeUnusedImports([]byte(tc.input))
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, string(actual))
+		})
+	}
+}

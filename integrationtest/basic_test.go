@@ -305,13 +305,22 @@ spec:
 }
 
 func TestGenerationWithOnlyEmbeddedMetadata(t *testing.T) {
-	inputPath := testProjectCopy(t, "embeddedmetaproject")
+	requireGeneratedCodeBuilds(t, "embeddedmetaproject", "xwidget.yaml")
+}
+
+func TestGenerationWithExternalStructFields(t *testing.T) {
+	requireGeneratedCodeBuilds(t, "externalstructproject", "xgateway.yaml")
+}
+
+func requireGeneratedCodeBuilds(t *testing.T, project, xrdFile string) {
+	t.Helper()
+	inputPath := testProjectCopy(t, project)
 	outputPath := filepath.Join(t.TempDir(), "output")
 
 	cmd := exec.Command(xrdGenBinary(t), "go:xrd", "--input-path", inputPath, "--output-path", outputPath)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
-	require.FileExists(t, filepath.Join(outputPath, "xwidget.yaml"))
+	require.FileExists(t, filepath.Join(outputPath, xrdFile))
 
 	vetCmd := exec.Command("go", "vet", ".")
 	vetCmd.Dir = inputPath

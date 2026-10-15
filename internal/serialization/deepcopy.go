@@ -78,10 +78,9 @@ func GenerateDeepCopy(structs []parsing.Struct, headerFile string) ([]byte, erro
 
 		var fields []fieldCode
 		for _, field := range s.Fields {
-			code := generateFieldCode(field, packageName)
-			if code != "" {
+			collectImports(field.Type, packageName, allImports)
+			if code := generateFieldCode(field, packageName); code != "" {
 				fields = append(fields, fieldCode{Code: code})
-				collectFieldCodeImports(field.Type, packageName, allImports)
 			}
 		}
 
@@ -188,20 +187,6 @@ func generateFieldCode(field parsing.Field, packageName string) string {
 		return ""
 	}
 	return ""
-}
-
-// The copy code only spells out type names for collections and pointers to
-// time types. Every other field is copied by assignment or through its own deep
-// copy method.
-func collectFieldCodeImports(fieldType parsing.FieldType, packageName string, imports map[string]string) {
-	switch t := fieldType.(type) {
-	case parsing.ArrayType, parsing.MapType:
-		collectImports(t, packageName, imports)
-	case parsing.TimeType:
-		if t.IsPointer {
-			collectImports(t, packageName, imports)
-		}
-	}
 }
 
 func structNeedsDeepCopy(fieldType parsing.FieldType, packageName string) bool {
