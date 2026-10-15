@@ -922,7 +922,106 @@ func TestGenerateDeepCopy_ObjectMeta(t *testing.T) {
 
 	code := string(result)
 	require.Contains(t, code, "in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)")
-	require.Contains(t, code, `metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"`, "Should always use alias metav1 when using ObjectMeta")
+	requireImports(t, nil, code)
+}
+
+func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
+	const metav1Path = "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1Import := `metav1 "` + metav1Path + `"`
+	runtimeImport := `runtime "k8s.io/apimachinery/pkg/runtime"`
+	otherpkgImport := `otherpkg "github.com/example/otherpkg"`
+
+	typeMeta := parsing.Field{Type: parsing.MetadataType{Name: "TypeMeta", Package: "metav1", ImportPath: metav1Path}, IsInline: true}
+	objectMeta := parsing.Field{Type: parsing.MetadataType{Name: "ObjectMeta", Package: "metav1", ImportPath: metav1Path}, IsInline: true}
+	metav1Time := parsing.TimeType{Package: "metav1", ImportPath: metav1Path}
+	condition := parsing.MetadataType{Name: "Condition", Package: "metav1", ImportPath: metav1Path}
+	externalStruct := parsing.StructType{Name: "ExternalType", Package: "otherpkg", ImportPath: "github.com/example/otherpkg"}
+	localStruct := parsing.StructType{Name: "XWidgetSpec", Package: "testpkg"}
+
+	tests := map[string]struct {
+		fields          []parsing.Field
+		expectedImports []string
+	}{
+		"embedded TypeMeta and ObjectMeta": {
+			fields:          []parsing.Field{typeMeta, objectMeta, {Name: "Spec", Type: localStruct}},
+			expectedImports: []string{runtimeImport},
+		},
+		"embedded TypeMeta and ListMeta": {
+			fields: []parsing.Field{
+				typeMeta,
+				{Type: parsing.MetadataType{Name: "ListMeta", Package: "metav1", ImportPath: metav1Path}, IsInline: true},
+				{Name: "Items", Type: parsing.ArrayType{ElementType: localStruct}},
+			},
+			expectedImports: []string{runtimeImport},
+		},
+		"named ObjectMeta field": {
+			fields: []parsing.Field{{Name: "Metadata", Type: objectMeta.Type}},
+		},
+		"metav1.Time": {
+			fields: []parsing.Field{{Name: "LastUpdated", Type: metav1Time}},
+		},
+		"pointer to metav1.Time": {
+			fields:          []parsing.Field{{Name: "LastUpdated", Type: parsing.TimeType{Package: "metav1", ImportPath: metav1Path, IsPointer: true}}},
+			expectedImports: []string{metav1Import},
+		},
+		"pointer to time.Time": {
+			fields:          []parsing.Field{{Name: "LastUpdated", Type: parsing.TimeType{Package: "time", ImportPath: "time", IsPointer: true}}},
+			expectedImports: []string{`time "time"`},
+		},
+		"external struct": {
+			fields: []parsing.Field{{Name: "External", Type: externalStruct}},
+		},
+		"pointer to external struct": {
+			fields: []parsing.Field{{Name: "External", Type: parsing.StructType{Name: "ExternalType", Package: "otherpkg", ImportPath: "github.com/example/otherpkg", IsPointer: true}}},
+		},
+		"local struct and pointer to local struct": {
+			fields: []parsing.Field{
+				{Name: "Spec", Type: localStruct},
+				{Name: "OptionalSpec", Type: parsing.StructType{Name: "XWidgetSpec", Package: "testpkg", IsPointer: true}},
+			},
+		},
+		"slice of metav1.Condition": {
+			fields:          []parsing.Field{{Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
+			expectedImports: []string{metav1Import},
+		},
+		"slice of metav1.Condition imported without alias": {
+			fields:          []parsing.Field{{Name: "Conditions", Type: parsing.ArrayType{ElementType: parsing.MetadataType{Name: "Condition", Package: "v1", ImportPath: metav1Path}}}},
+			expectedImports: []string{`v1 "` + metav1Path + `"`},
+		},
+		"slice of metav1.Time": {
+			fields:          []parsing.Field{{Name: "Times", Type: parsing.ArrayType{ElementType: metav1Time}}},
+			expectedImports: []string{metav1Import},
+		},
+		"nested slice of external struct": {
+			fields:          []parsing.Field{{Name: "Nested", Type: parsing.ArrayType{ElementType: parsing.ArrayType{ElementType: externalStruct}}}},
+			expectedImports: []string{otherpkgImport},
+		},
+		"map of external struct": {
+			fields:          []parsing.Field{{Name: "Externals", Type: parsing.MapType{KeyType: parsing.StringType{}, ValueType: externalStruct}}},
+			expectedImports: []string{otherpkgImport},
+		},
+		"map of metav1.Time": {
+			fields:          []parsing.Field{{Name: "Times", Type: parsing.MapType{KeyType: parsing.StringType{}, ValueType: metav1Time}}},
+			expectedImports: []string{metav1Import},
+		},
+		"embedded metadata alongside slice of metav1.Condition": {
+			fields:          []parsing.Field{typeMeta, objectMeta, {Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
+			expectedImports: []string{metav1Import, runtimeImport},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			structs := []parsing.Struct{
+				{Name: "XWidget", Package: "testpkg", IsRoot: true, Fields: tc.fields},
+				{Name: "XWidgetSpec", Package: "testpkg", Fields: []parsing.Field{{Name: "Size", Type: parsing.StringType{}}}},
+			}
+
+			result, err := GenerateDeepCopy(structs, "")
+			require.NoError(t, err)
+			requireImports(t, tc.expectedImports, string(result))
+		})
+	}
 }
 
 func TestGenerateDeepCopy_PackageFiltering(t *testing.T) {

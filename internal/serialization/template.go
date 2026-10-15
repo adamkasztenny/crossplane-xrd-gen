@@ -31,8 +31,6 @@ import (
 const (
 	runtimeImportPath = "k8s.io/apimachinery/pkg/runtime"
 	runtimeAlias      = "runtime"
-	metav1ImportPath  = "k8s.io/apimachinery/pkg/apis/meta/v1"
-	metav1Alias       = "metav1"
 )
 
 type importInfo struct {
@@ -123,13 +121,7 @@ func filterByPackage(structs []parsing.Struct, packageName string) []parsing.Str
 func collectImports(fieldType parsing.FieldType, packageName string, imports map[string]string) {
 	switch t := fieldType.(type) {
 	case parsing.MetadataType:
-		if t.ImportPath == "" {
-			return
-		}
-		// Always use metav1 alias for consistency with Kubernetes conventions
-		if t.ImportPath == metav1ImportPath {
-			imports[t.ImportPath] = metav1Alias
-		} else {
+		if t.ImportPath != "" {
 			imports[t.ImportPath] = t.Package
 		}
 	case parsing.TimeType:

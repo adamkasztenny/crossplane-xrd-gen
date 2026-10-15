@@ -17,8 +17,10 @@ limitations under the License.
 package serialization
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -50,4 +52,35 @@ func normalizeCode(code string) string {
 		}
 	}
 	return strings.Join(normalized, "\n")
+}
+
+// Expected imports are given as `alias "path"`. Every imported package must
+// also be referenced, otherwise the generated code does not compile.
+func requireImports(t *testing.T, expected []string, code string) {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), "", code, 0)
+	require.NoError(t, err, "Generated code has syntax errors")
+
+	qualifiers := make(map[string]bool)
+	ast.Inspect(file, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				qualifiers[ident.Name] = true
+			}
+		}
+		return true
+	})
+
+	actual := make([]string, 0, len(file.Imports))
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		require.NoError(t, err)
+		name := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		require.Truef(t, qualifiers[name], "%q is imported as %s and not used", path, name)
+		actual = append(actual, name+" "+imp.Path.Value)
+	}
+	require.ElementsMatch(t, expected, actual)
 }
