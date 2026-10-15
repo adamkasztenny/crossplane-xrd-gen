@@ -312,6 +312,10 @@ func TestGenerationWithExternalStructFields(t *testing.T) {
 	requireGeneratedCodeBuilds(t, "externalstructproject", "xgateway.yaml")
 }
 
+func TestGenerationWithPackageImportedUnderDifferentAliases(t *testing.T) {
+	requireGeneratedCodeBuilds(t, "multialiasproject", "xwidget.yaml")
+}
+
 func requireGeneratedCodeBuilds(t *testing.T, project, xrdFile string) {
 	t.Helper()
 	inputPath := testProjectCopy(t, project)

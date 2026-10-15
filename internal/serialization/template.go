@@ -19,6 +19,7 @@ package serialization
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
@@ -88,12 +89,24 @@ func executeTemplate(tmplName, tmplContent string, data interface{}) ([]byte, er
 
 // Imports are collected from every field type, but many fields are copied
 // without naming their type, so imports the code never references are dropped.
+// Usage is checked per alias, since the same package can be imported under
+// more than one alias.
 func removeUnusedImports(src []byte) ([]byte, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
+
+	referenced := make(map[string]bool)
+	ast.Inspect(file, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Obj == nil {
+				referenced[ident.Name] = true
+			}
+		}
+		return true
+	})
 
 	type namedImport struct{ name, path string }
 	var unused []namedImport
@@ -102,14 +115,18 @@ func removeUnusedImports(src []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if astutil.UsesImport(file, path) {
+		var alias string
+		if imp.Name != nil {
+			alias = imp.Name.Name
+		}
+		name := alias
+		if name == "" {
+			name = path[strings.LastIndex(path, "/")+1:]
+		}
+		if name == "_" || name == "." || referenced[name] {
 			continue
 		}
-		var name string
-		if imp.Name != nil {
-			name = imp.Name.Name
-		}
-		unused = append(unused, namedImport{name: name, path: path})
+		unused = append(unused, namedImport{name: alias, path: path})
 	}
 	if len(unused) == 0 {
 		return src, nil
@@ -167,22 +184,23 @@ func filterByPackage(structs []parsing.Struct, packageName string) []parsing.Str
 
 // collectImports recursively collects all imports needed for a field type
 // packageName: the current package name (to filter out local types)
-// imports: map to collect import path -> alias
-func collectImports(fieldType parsing.FieldType, packageName string, imports map[string]string) {
+// imports: set of alias and path pairs. Source files can import the same
+// package under different aliases, and the copy code keeps each field's alias.
+func collectImports(fieldType parsing.FieldType, packageName string, imports map[importInfo]bool) {
 	switch t := fieldType.(type) {
 	case parsing.MetadataType:
 		if t.ImportPath != "" {
-			imports[t.ImportPath] = t.Package
+			imports[importInfo{Alias: t.Package, Path: t.ImportPath}] = true
 		}
 	case parsing.TimeType:
 		if t.ImportPath != "" {
-			imports[t.ImportPath] = t.Package
+			imports[importInfo{Alias: t.Package, Path: t.ImportPath}] = true
 		}
 	case parsing.StructType:
 		if t.Package == packageName || t.ImportPath == "" {
 			return // Skip local types
 		}
-		imports[t.ImportPath] = t.Package
+		imports[importInfo{Alias: t.Package, Path: t.ImportPath}] = true
 	case parsing.ArrayType:
 		collectImports(t.ElementType, packageName, imports)
 	case parsing.MapType:
@@ -191,22 +209,18 @@ func collectImports(fieldType parsing.FieldType, packageName string, imports map
 	}
 }
 
-// sortImports converts a map of imports to a sorted slice of importInfo
-// for deterministic output
-func sortImports(importsMap map[string]string) []importInfo {
-	importPaths := make([]string, 0, len(importsMap))
-	for path := range importsMap {
-		importPaths = append(importPaths, path)
+// sortImports converts a set of imports to a slice sorted by path, then alias
+func sortImports(importSet map[importInfo]bool) []importInfo {
+	imports := make([]importInfo, 0, len(importSet))
+	for imp := range importSet {
+		imports = append(imports, imp)
 	}
-	sort.Strings(importPaths)
-
-	imports := make([]importInfo, 0, len(importPaths))
-	for _, path := range importPaths {
-		imports = append(imports, importInfo{
-			Alias: importsMap[path],
-			Path:  path,
-		})
-	}
+	sort.Slice(imports, func(i, j int) bool {
+		if imports[i].Path != imports[j].Path {
+			return imports[i].Path < imports[j].Path
+		}
+		return imports[i].Alias < imports[j].Alias
+	})
 	return imports
 }
 

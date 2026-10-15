@@ -1010,6 +1010,20 @@ func TestGenerateDeepCopy_ImportsOnlyReferencedPackages(t *testing.T) {
 			fields:          []parsing.Field{{Name: "Times", Type: parsing.MapType{KeyType: parsing.StringType{}, ValueType: metav1Time}}},
 			expectedImports: []string{metav1Import},
 		},
+		"same package under different aliases with one referenced": {
+			fields: []parsing.Field{
+				{Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}},
+				{Type: parsing.MetadataType{Name: "ObjectMeta", Package: "meta", ImportPath: metav1Path}, IsInline: true},
+			},
+			expectedImports: []string{metav1Import},
+		},
+		"same package under different aliases with both referenced": {
+			fields: []parsing.Field{
+				{Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}},
+				{Name: "OtherConditions", Type: parsing.ArrayType{ElementType: parsing.MetadataType{Name: "Condition", Package: "meta", ImportPath: metav1Path}}},
+			},
+			expectedImports: []string{metav1Import, `meta "` + metav1Path + `"`},
+		},
 		"embedded metadata alongside slice of metav1.Condition": {
 			fields:          []parsing.Field{typeMeta, objectMeta, {Name: "Conditions", Type: parsing.ArrayType{ElementType: condition}}},
 			expectedImports: []string{metav1Import, runtimeImport},

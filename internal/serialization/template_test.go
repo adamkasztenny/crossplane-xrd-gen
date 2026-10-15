@@ -164,6 +164,25 @@ import (
 var _ sets.Empty
 `,
 		},
+		"checks each alias of the same package separately": {
+			input: `package example
+
+import (
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var _ metav1.Condition
+`,
+			expected: `package example
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+var _ metav1.Condition
+`,
+		},
 		"leaves code without unused imports unchanged": {
 			input: `package example
 

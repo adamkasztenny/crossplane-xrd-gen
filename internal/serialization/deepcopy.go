@@ -66,8 +66,7 @@ func GenerateDeepCopy(structs []parsing.Struct, headerFile string) ([]byte, erro
 
 	structInfos := make([]structInfo, 0, len(targetStructs))
 	needsRuntimeImport := false
-	// Map of importPath -> alias (package name)
-	allImports := make(map[string]string)
+	allImports := make(map[importInfo]bool)
 
 	for _, s := range targetStructs {
 		hasTypeMeta := hasInlineTypeMeta(s)
@@ -92,7 +91,7 @@ func GenerateDeepCopy(structs []parsing.Struct, headerFile string) ([]byte, erro
 	}
 
 	if needsRuntimeImport {
-		allImports[runtimeImportPath] = runtimeAlias
+		allImports[importInfo{Alias: runtimeAlias, Path: runtimeImportPath}] = true
 	}
 
 	imports := sortImports(allImports)
